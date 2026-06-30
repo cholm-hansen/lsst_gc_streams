@@ -198,4 +198,15 @@ def gen_stream_data(haloid, stream_id, streamcat_path):
     stream_icrs = _convert_stream_icrs(stream)
     cluster_icrs = _convert_cluster_icrs(cluster)
 
+
+    ## Add errors to proper motions based on Table 3.3 of LSST Science Book
+    _r_mag_interp = [21, 22, 23, 24]
+    _pm_err_interp = [0.2, 0.3, 0.5, 1]
+
+    stream_icrs.pm_ra_cosdec += np.random.normal(0, np.interp(mags[:, 1], _r_mag_interp, _pm_err_interp), 
+                                                 size=stream_icrs.pm_ra_cosdec.shape)
+
+    stream_icrs.pm_dec += np.random.normal(0, np.interp(mags[:, 1], _r_mag_interp, _pm_err_interp),
+                                             size=stream_icrs.pm_dec.shape)
+
     return cluster_icrs, stream_icrs, mags
