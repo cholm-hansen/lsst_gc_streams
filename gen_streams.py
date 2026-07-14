@@ -151,9 +151,11 @@ def _phot_stream(stream, cluster, bands=['LSST_g', 'LSST_r', 'Gaia_G_DR2Rev']):
 
 
 
-def gen_stream_data(haloid, stream_id, streamcat_path):
+def gen_stream_data(haloid, stream_id, streamcat_path, yr10baseline=True):
     """
-    Converts a given stream from the Holm-Hansen+2026 catalog as an LSST-like observational mock
+    Converts a given stream from the Holm-Hansen+2026 catalog as an LSST-like observational mock. If
+    yr10baseline is True, assumes 10 year baseline for photometric and proper motion errors. Otherwise,
+    assumes 3 year baseline for photometric and proper motion errors.
 
     Parameters:
 
@@ -199,14 +201,52 @@ def gen_stream_data(haloid, stream_id, streamcat_path):
     cluster_icrs = _convert_cluster_icrs(cluster)
 
 
-    ## Add errors to proper motions based on Table 3.3 of LSST Science Book
-    _r_mag_interp = [21, 22, 23, 24]
-    _pm_err_interp = [0.2, 0.3, 0.5, 1]
+    ## Add errors to proper motions based on Table 3.3 of LSST Science Book and the photerr package:
+    ## https://github.com/jfcrenshaw/photerr
 
-    stream_icrs.pm_ra_cosdec += np.random.normal(0, np.interp(mags[:, 1], _r_mag_interp, _pm_err_interp), 
-                                                 size=stream_icrs.pm_ra_cosdec.shape)
 
-    stream_icrs.pm_dec += np.random.normal(0, np.interp(mags[:, 1], _r_mag_interp, _pm_err_interp),
-                                             size=stream_icrs.pm_dec.shape)
+    _r_mag_interp = np.array([21, 22, 23, 24])
+    _g_mag_interp = np.array([21, 22, 23, 24])
 
-    return cluster_icrs, stream_icrs, mags
+    if yr10baseline:
+        _pm_ra_err_interp = np.array([11, 15, 31, 74])*0.014
+        _pm_dec_err_interp = np.array([11, 15, 31, 74])*0.014
+        _g_mag_err_interp = np.array([0.0051, 0.0057, 0.0079, 0.016])
+        _r_mag_err_interp = np.array([0.0051, 0.0055, 0.0073, 0.014])
+        
+
+    elif not yr10baseline:
+        _pm_ra_err_interp = np.array([11, 15, 31, 74])*0.014 * 5
+        _pm_dec_err_interp = np.array([11, 15, 31, 74])*0.014 * 5
+        _g_mag_err_interp = np.array([0.0055, 0.0069, 0.012, 0.028])
+        _r_mag_err_interp = np.array([0.0053, 0.0064, 0.011, 0.024])
+
+
+
+
+
+
+
+    new_pmra = stream_icrs.pm_ra_cosdec + np.random.normal(0, np.interp(mags[1], _r_mag_interp, _pm_ra_err_interp),
+                                                        size=stream_icrs.pm_ra_cosdec.shape)*u.mas/u.yr
+
+    new_dec = stream_icrs.pm_dec + np.random.normal(0, np.interp(mags[1], _r_mag_interp, _pm_dec_err_interp),
+                                                        size=stream_icrs.pm_dec.shape)*u.mas/u.yr
+
+
+
+    stream_icrs_with_errors = coord.SkyCoord(ra=stream_icrs.ra, dec=stream_icrs.dec, 
+                           pm_ra_cosdec=new_pmra, pm_dec=new_dec,
+                           frame='icrs')
+    
+
+
+    mags[0] += np.random.normal(0, np.interp(mags[0], _g_mag_interp, _g_mag_err_interp), size=mags[0].shape)
+    mags[1] += np.random.normal(0, np.interp(mags[1], _r_mag_interp, _r_mag_err_interp), size=mags[1].shape)
+    
+
+    
+
+
+
+    return cluster_icrs, stream_icrs_with_errors, mags
